@@ -27,6 +27,15 @@ ALERT_FOLLOWUP_INTERVAL="${ALERT_FOLLOWUP_INTERVAL:-10800}"
 ALERT_REFERRAL_NAME="${ALERT_REFERRAL_NAME:-}"
 ALERT_REFERRAL_URL="${ALERT_REFERRAL_URL:-}"
 
+# ── Pushover alerts (optional) ──
+PUSHOVER_TOKEN="${PUSHOVER_TOKEN:-}"
+PUSHOVER_USER="${PUSHOVER_USER:-}"
+PUSHOVER_PRIORITY="${PUSHOVER_PRIORITY:-0}"
+PUSHOVER_DEVICE="${PUSHOVER_DEVICE:-}"
+PUSHOVER_SOUND="${PUSHOVER_SOUND:-pushover}"
+PUSHOVER_RETRY="${PUSHOVER_RETRY:-30}"
+PUSHOVER_EXPIRE="${PUSHOVER_EXPIRE:-3600}"
+
 # ── qBittorrent tracker health (post-VPN-reconnect recovery) ──
 # After a gluetun reconnect, qBittorrent sometimes ends up with every UDP
 # tracker dead globally even though the VPN tunnel itself is healthy. The
@@ -98,9 +107,53 @@ EOF
   fi
 }
 
+send_pushover() {
+  subject="$1"
+  body="$2"
+
+  if [ -z "$PUSHOVER_TOKEN" ] || [ -z "$PUSHOVER_USER" ]; then
+    return 0
+  fi
+
+  case "$PUSHOVER_PRIORITY" in
+    -2|-1|0|1|2) ;;
+    *)
+      log "[alert] invalid PUSHOVER_PRIORITY=$PUSHOVER_PRIORITY; skipping Pushover alert"
+      return 1
+      ;;
+  esac
+
+  log "[alert] sending Pushover notification: $subject"
+  set -- \
+    --form-string "token=$PUSHOVER_TOKEN" \
+    --form-string "user=$PUSHOVER_USER" \
+    --form-string "title=gluetun-autoheal: $subject" \
+    --form-string "message=$body" \
+    --form-string "priority=$PUSHOVER_PRIORITY"
+  [ -n "$PUSHOVER_DEVICE" ] && set -- "$@" --form-string "device=$PUSHOVER_DEVICE"
+  [ -n "$PUSHOVER_SOUND" ] && set -- "$@" --form-string "sound=$PUSHOVER_SOUND"
+  if [ "$PUSHOVER_PRIORITY" = "2" ]; then
+    set -- "$@" \
+      --form-string "retry=$PUSHOVER_RETRY" \
+      --form-string "expire=$PUSHOVER_EXPIRE"
+  fi
+
+  if curl --silent --show-error --fail --max-time 15 \
+       "$@" \
+       https://api.pushover.net/1/messages.json >/dev/null; then
+    log "[alert] Pushover notification sent"
+  else
+    log "[alert] Pushover notification failed"
+    return 1
+  fi
+}
+
 send_alert() {
   subject="$1"
   body="$2"
+
+  # Notification failures must never stop the watchdog's recovery loops.
+  send_pushover "$subject" "$body" || true
 
   if [ -z "$ALERT_EMAIL_TO" ] || [ -z "$SMTP_USER" ] || [ -z "$SMTP_PASSWORD" ]; then
     return 0

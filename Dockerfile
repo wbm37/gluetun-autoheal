@@ -1,8 +1,11 @@
-# Stage 1: extract docker CLI and compose plugin
-FROM docker:cli AS docker-source
+# Stage 1: extract docker CLI and compose plugin.
+# Keep the Docker CLI source explicit when this fork is rebuilt.
+ARG DOCKER_CLI_IMAGE=docker:cli@sha256:206ae9cc405101ab0cf97d4b515d21bf6aae961f98f7f9d8de6c111718fef335
+ARG ALPINE_IMAGE=alpine:latest@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
+FROM ${DOCKER_CLI_IMAGE} AS docker-source
 
 # Stage 2: minimal Alpine with only what we need
-FROM alpine:latest
+FROM ${ALPINE_IMAGE}
 
 RUN apk add --no-cache curl ca-certificates && apk upgrade --no-cache
 

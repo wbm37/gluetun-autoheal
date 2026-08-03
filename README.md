@@ -2,6 +2,8 @@
 
 All-in-one watchdog that keeps containers using `network_mode: "service:gluetun"` alive across gluetun recreations, VPN drops, host suspend/resume, and broken network namespaces.
 
+This fork is based on upstream commit [`4e1488c`](https://github.com/Pardo24/gluetun-autoheal/commit/4e1488c99a39055962d7de507c077c2c71af6fc0) and adds optional direct Pushover notifications.
+
 ## The problem
 
 When you run containers like qBittorrent, Prowlarr or FlareSolverr with `network_mode: "service:gluetun"`, they share gluetun's network namespace. Several common scenarios break them silently:
@@ -25,6 +27,8 @@ This image runs three coordinated mechanisms in a single container:
 
 Optional: **email alerts** when the VPN can't be recovered automatically (subscription expired, server outage, bad credentials), with optional referral link to monetize alerts.
 
+Optional: **Pushover alerts** through the Pushover API. Pushover notifications do not require an SMTP server.
+
 Optional: **qBittorrent tracker health check** for a degradation mode the connectivity check can't see — VPN is up, DNS works, DHT works, but every UDP tracker is dead globally. Sampling tracker status via the qBit WebUI catches this and triggers a `docker restart $GLUETUN_CONTAINER` so the event listener can cascade a clean recreate.
 
 ## Usage
@@ -32,7 +36,7 @@ Optional: **qBittorrent tracker health check** for a degradation mode the connec
 ```yaml
 services:
   gluetun-autoheal:
-    image: danipal/gluetun-autoheal:latest
+    image: ghcr.io/wbm37/gluetun-autoheal:latest
     container_name: gluetun_autoheal
     restart: unless-stopped
     volumes:
@@ -107,6 +111,13 @@ Add the `autoheal=true` label and a healthcheck. Standard `willfarrell/autoheal`
 | `ALERT_FOLLOWUP_INTERVAL` | `10800` | Seconds between follow-up alerts during a sustained outage (default: 3 hours) |
 | `ALERT_REFERRAL_NAME` | _(empty)_ | Optional VPN provider name to recommend in alert emails (e.g. `ProtonVPN`) |
 | `ALERT_REFERRAL_URL` | _(empty)_ | Optional referral URL appended to alert emails. Lets you monetize alerts when users' current VPN fails, since they're already in the mindset to switch providers |
+| `PUSHOVER_TOKEN` | _(empty)_ | Pushover application token; enables Pushover alerts when combined with `PUSHOVER_USER` |
+| `PUSHOVER_USER` | _(empty)_ | Pushover user or group key; enables Pushover alerts when combined with `PUSHOVER_TOKEN` |
+| `PUSHOVER_PRIORITY` | `0` | Pushover priority: `-2`, `-1`, `0`, `1`, or `2` |
+| `PUSHOVER_DEVICE` | _(empty)_ | Optional Pushover device name |
+| `PUSHOVER_SOUND` | `pushover` | Optional Pushover notification sound; empty disables the override |
+| `PUSHOVER_RETRY` | `30` | Retry interval in seconds for emergency priority `2` |
+| `PUSHOVER_EXPIRE` | `3600` | Expiration in seconds for emergency priority `2` |
 | `QBIT_CONTAINER` | _(empty)_ | Container name of your qBittorrent instance. Set to enable the tracker health check loop. Leave empty to disable. |
 | `QBIT_API_PORT` | `8080` | qBittorrent WebUI port _inside_ the container (the one curl will hit via `docker exec`) |
 | `QBIT_HEALTH_INTERVAL` | `300` | Seconds between tracker health checks |
@@ -153,6 +164,22 @@ You'll receive three types of email:
 3. **Recovery**: once when the VPN comes back online, with total outage duration and restart count.
 
 Leave `ALERT_EMAIL_TO` empty to disable alerts entirely.
+
+## Pushover alerts
+
+Pushover alerts use the HTTPS API directly and do not require SMTP. Create a Pushover application to obtain a token, then configure the user or group key and token:
+
+```yaml
+    environment:
+      PUSHOVER_TOKEN: your-application-token
+      PUSHOVER_USER: your-user-or-group-key
+      PUSHOVER_PRIORITY: "0"
+      # Optional:
+      # PUSHOVER_DEVICE: phone
+      # PUSHOVER_SOUND: pushover
+```
+
+Pushover notifications are sent for the same events as email alerts: VPN failure, follow-up failure, and recovery. Pushover failures are logged but never stop the recovery loops. Priority `2` uses the configured `PUSHOVER_RETRY` and `PUSHOVER_EXPIRE` values required by the Pushover API.
 
 ## qBittorrent tracker health check
 
