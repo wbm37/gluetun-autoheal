@@ -55,6 +55,27 @@ services:
       AUTOHEAL_LABEL: autoheal=true           # label opting non-VPN containers into autoheal
 ```
 
+### Dockhand-managed stacks
+
+Dockhand can hold the stack variables without requiring a host-side `.env` file. Deploy the Compose stack through Dockhand, add every variable used by Compose interpolation to the stack's environment settings, and mark sensitive values as secrets where appropriate.
+
+For recovery, pass the same interpolation variables to this container and list them in `RECOVERY_ENV_VARS`. The watchdog exports those in-memory values to its Compose subprocess. It does not read, create, or mount an `.env` file.
+
+The watchdog still needs the Compose file and Docker socket:
+
+```yaml
+volumes:
+  - /var/run/docker.sock:/var/run/docker.sock
+  - /path/to/project/compose.yaml:/workspace/compose.yaml:ro
+environment:
+  COMPOSE_FILE: /workspace/compose.yaml
+  COMPOSE_PROJECT_NAME: downloads
+  RECOVERY_ENV_VARS: WIREGUARD_PRIVATE_KEY
+  WIREGUARD_PRIVATE_KEY: ${WIREGUARD_PRIVATE_KEY}
+```
+
+`docker compose up -d --force-recreate` remains intentional. A plain `docker restart` cannot repair dependents after Gluetun's network namespace has been recreated.
+
 ### VPN-dependent containers (qBittorrent, Prowlarr, FlareSolverr, etc.)
 
 Just declare them with `network_mode: "service:gluetun"` as usual. **No `autoheal=true` label needed**: they're recovered automatically by the active connectivity check and the event listener, both of which use `docker compose up -d` (the only command that works after a namespace break).
