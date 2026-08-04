@@ -93,9 +93,15 @@ prepare_compose_environment() {
       return 1
     fi
 
+    value=$(printenv "$variable")
+    if [ -z "$value" ]; then
+      log "[recovery] required Compose variable is empty: $variable"
+      return 1
+    fi
+
     # Compose reads interpolation variables from its parent process. Exporting
     # the existing value avoids creating or mounting a persistent env file.
-    export "$variable=$(printenv "$variable")"
+    export "$variable=$value"
   done
 }
 
