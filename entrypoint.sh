@@ -60,6 +60,7 @@ QBIT_HEALTH_GRACE="${QBIT_HEALTH_GRACE:-600}"
 QBIT_HEALTH_SAMPLE="${QBIT_HEALTH_SAMPLE:-15}"
 QBIT_HEALTH_FAIL_STREAK="${QBIT_HEALTH_FAIL_STREAK:-2}"
 QBIT_API_PORT="${QBIT_API_PORT:-8080}"
+COMPOSE_LOCK_DIR="${COMPOSE_LOCK_DIR:-/tmp/gluetun-autoheal-compose.lock}"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"; }
 
@@ -71,6 +72,12 @@ is_gluetun_dep() {
 }
 
 compose_up_deps() {
+  # The active check and health-event listener run concurrently. Serialize
+  # Compose operations so both cannot recreate the same container at once.
+  while ! mkdir "$COMPOSE_LOCK_DIR" 2>/dev/null; do
+    sleep 1
+  done
+
   PROJECT_ARG=""
   [ -n "$COMPOSE_PROJECT_NAME" ] && PROJECT_ARG="-p $COMPOSE_PROJECT_NAME"
   # --force-recreate is required because docker compose otherwise sees the
@@ -78,6 +85,9 @@ compose_up_deps() {
   # is broken (which is exactly the case we're trying to fix)
   # shellcheck disable=SC2086
   docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" $PROJECT_ARG up -d --force-recreate $GLUETUN_DEPS
+  rc=$?
+  rmdir "$COMPOSE_LOCK_DIR"
+  return "$rc"
 }
 
 container_running() {
