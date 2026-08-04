@@ -20,7 +20,7 @@ RUN chmod +x /entrypoint.sh
 ENV GLUETUN_CONTAINER=gluetun \
     GLUETUN_DEPS=qbittorrent \
     COMPOSE_FILE=/workspace/docker-compose.yml \
-    ENV_FILE=/workspace/.env \
+    RECOVERY_ENV_VARS=WIREGUARD_PRIVATE_KEY \
     AUTOHEAL_INTERVAL=30 \
     AUTOHEAL_LABEL=autoheal=true
 

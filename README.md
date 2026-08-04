@@ -41,13 +41,14 @@ services:
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /path/to/your/project:/workspace:ro   # must contain docker-compose.yml and .env
+      - /path/to/your/project/compose.yaml:/workspace/compose.yaml:ro
     environment:
       GLUETUN_CONTAINER: gluetun              # container name of your gluetun instance
       GLUETUN_DEPS: "qbittorrent prowlarr flaresolverr"             # compose service names to recreate
       GLUETUN_DEP_CONTAINERS: "qbittorrent prowlarr flaresolverr"   # container names to actively check
-      COMPOSE_FILE: /workspace/docker-compose.yml
-      ENV_FILE: /workspace/.env
+      COMPOSE_FILE: /workspace/compose.yaml
+      RECOVERY_ENV_VARS: WIREGUARD_PRIVATE_KEY   # variables needed for Compose interpolation
+      WIREGUARD_PRIVATE_KEY: "..."              # supplied by the stack manager, not a file mount
       COMPOSE_PROJECT_NAME: myproject         # required if your project folder isn't the compose project name
       CHECK_INTERVAL: "60"                    # seconds between active connectivity checks
       AUTOHEAL_INTERVAL: "30"                 # seconds between autoheal label checks (non-VPN containers)
@@ -92,7 +93,7 @@ Add the `autoheal=true` label and a healthcheck. Standard `willfarrell/autoheal`
 | `GLUETUN_DEPS` | `qbittorrent` | Space-separated compose service names that depend on gluetun's network |
 | `GLUETUN_DEP_CONTAINERS` | _(falls back to `GLUETUN_DEPS`)_ | Space-separated container names of dependents (used to test connectivity from inside each one). Set this if container names differ from compose service names (e.g. `myproject_qbittorrent`) |
 | `COMPOSE_FILE` | `/workspace/docker-compose.yml` | Path to your docker-compose.yml inside the container |
-| `ENV_FILE` | `/workspace/.env` | Path to your .env file inside the container |
+| `RECOVERY_ENV_VARS` | `WIREGUARD_PRIVATE_KEY` | Space-separated variables exported to Compose during recovery; no `.env` file is required |
 | `COMPOSE_PROJECT_NAME` | _(empty)_ | Set this if your compose project name differs from the mounted folder name. When the compose file is mounted at `/workspace`, Docker Compose defaults to project name `workspace`, so set this to your actual project name (e.g. `myproject`) to avoid conflicts |
 | `CHECK_INTERVAL` | `60` | Seconds between active connectivity checks |
 | `VPN_TEST_HOST` | `1.1.1.1` | Host used for the TCP connectivity test |

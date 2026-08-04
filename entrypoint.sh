@@ -5,8 +5,10 @@ GLUETUN_CONTAINER="${GLUETUN_CONTAINER:-gluetun}"
 GLUETUN_DEPS="${GLUETUN_DEPS:-qbittorrent}"
 GLUETUN_DEP_CONTAINERS="${GLUETUN_DEP_CONTAINERS:-$GLUETUN_DEPS}"
 COMPOSE_FILE="${COMPOSE_FILE:-/workspace/docker-compose.yml}"
-ENV_FILE="${ENV_FILE:-/workspace/.env}"
 COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-}"
+# Space-separated variables exported to Compose during recovery. These values
+# are supplied by the stack manager, so no host-side .env file is required.
+RECOVERY_ENV_VARS="${RECOVERY_ENV_VARS:-WIREGUARD_PRIVATE_KEY}"
 CHECK_INTERVAL="${CHECK_INTERVAL:-60}"
 VPN_TEST_HOST="${VPN_TEST_HOST:-1.1.1.1}"
 VPN_TEST_PORT="${VPN_TEST_PORT:-443}"
@@ -77,6 +79,26 @@ is_gluetun_dep() {
   return 1
 }
 
+prepare_compose_environment() {
+  for variable in $RECOVERY_ENV_VARS; do
+    case "$variable" in
+      ''|*[!A-Za-z0-9_]*|[0-9]*)
+        log "[recovery] invalid RECOVERY_ENV_VARS entry: $variable"
+        return 1
+        ;;
+    esac
+
+    if ! printenv "$variable" >/dev/null 2>&1; then
+      log "[recovery] required Compose variable is not set: $variable"
+      return 1
+    fi
+
+    # Compose reads interpolation variables from its parent process. Exporting
+    # the existing value avoids creating or mounting a persistent env file.
+    export "$variable=$(printenv "$variable")"
+  done
+}
+
 compose_up_deps() {
   # The active check and health-event listener run concurrently. Serialize
   # Compose operations so both cannot recreate the same container at once.
@@ -84,13 +106,18 @@ compose_up_deps() {
     sleep 1
   done
 
+  if ! prepare_compose_environment; then
+    rmdir "$COMPOSE_LOCK_DIR"
+    return 1
+  fi
+
   PROJECT_ARG=""
   [ -n "$COMPOSE_PROJECT_NAME" ] && PROJECT_ARG="-p $COMPOSE_PROJECT_NAME"
   # --force-recreate is required because docker compose otherwise sees the
   # containers as "running" and skips them, even when their network namespace
   # is broken (which is exactly the case we're trying to fix)
   # shellcheck disable=SC2086
-  docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" $PROJECT_ARG up -d --force-recreate $GLUETUN_DEPS
+  docker compose -f "$COMPOSE_FILE" $PROJECT_ARG up -d --force-recreate $GLUETUN_DEPS
   rc=$?
   rmdir "$COMPOSE_LOCK_DIR"
   return "$rc"
