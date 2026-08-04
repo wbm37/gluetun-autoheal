@@ -14,6 +14,7 @@ VPN_TEST_TIMEOUT="${VPN_TEST_TIMEOUT:-10}"
 FAILURE_THRESHOLD="${FAILURE_THRESHOLD:-2}"
 AUTOHEAL_INTERVAL="${AUTOHEAL_INTERVAL:-30}"
 AUTOHEAL_LABEL="${AUTOHEAL_LABEL:-autoheal=true}"
+STARTUP_GRACE="${STARTUP_GRACE:-30}"
 
 # ── Email alerts (optional) ──
 ALERT_EMAIL_TO="${ALERT_EMAIL_TO:-}"
@@ -63,6 +64,11 @@ QBIT_API_PORT="${QBIT_API_PORT:-8080}"
 COMPOSE_LOCK_DIR="${COMPOSE_LOCK_DIR:-/tmp/gluetun-autoheal-compose.lock}"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"; }
+
+if [ "$STARTUP_GRACE" -gt 0 ]; then
+  log "Startup grace: ${STARTUP_GRACE}s before enabling recovery watchers"
+  sleep "$STARTUP_GRACE"
+fi
 
 is_gluetun_dep() {
   for c in $GLUETUN_DEP_CONTAINERS; do
